@@ -1,0 +1,4 @@
+[Public]
+Object=(Name=UT99AP.APMenuItem,Class=Class,MetaClass=UMenu.UMenuModMenuItem,Description="&Archipelago,Connect to an Archipelago multiworld")
+Object=(Name=UT99AP.APDeathMatch,Class=Class,MetaClass=Botpack.TournamentGameInfo)
+Preferences=(Caption="Archipelago",Parent="Game Types",Class=UT99AP.APMutator,Immediate=True)
