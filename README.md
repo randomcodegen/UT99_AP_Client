@@ -5,10 +5,13 @@ Kills, objectives and pickups are locations.
 
 ## Install and play
 
+Choose the client archive that matches your **game executable**: the standard archive is for Windows x86 (tested on 469e), the `-x64` archive is for Windows x64 (tested on 469f RC5).
+Each includes its matching `UT99APNative.dll`.
+
 1. Put `ut99.apworld` in custom_worlds and run `Generate Template Options`.
 2. Put the .yaml in the `Players` folder and run `Generate` from the Launcher.
 3. Copy all four files from zip `System` into UT's `System` folder.
-4. Open **Mods > Archipelago**, connect, and select an unlocked arena. **FIRE** after a match replays that arena.
+4. Open **Mods > Archipelago**, connect, and select an unlocked arena.
 
 Each arena has win and frag checks. 
 CTF, Domination, and Assault add objective checks.
@@ -44,15 +47,25 @@ These commands work in the UT console:
 
 ## Build
 
-Requires UT99 469e, Visual Studio C++ tools, CMake, Git, Python, and `../APCpp`. 
-The native build downloads the pinned 469e SDK. 
-Builds stay in `.build` and `dist`.
+Requires UT99, Visual Studio C++ tools, CMake, Git, Python, and `../APCpp`.
+The default x86 build uses the pinned 469e SDK. Builds stay in `.build` and `dist/System`.
 
 ```powershell
 python tools/catalog.py
 ./build-native.ps1
 ./build.ps1 -UTPath C:\UnrealTournament
 ```
+
+For 469f RC5 x64, use an x64 game installation and the matching SDK (downloaded automatically):
+
+```powershell
+./build-native.ps1 -Architecture x64
+./build.ps1 -Architecture x64 -UTPath C:\UT469f-x64
+python tools/package.py --architecture x64
+```
+
+These builds stay in `.native-build-x64`, `.build-x64`, and `dist/x64/System`.
+When testing an extracted patch separately, pass `-GameDataPath C:\UnrealTournament` to `build.ps1` to reuse the full game's assets.
 
 ## Test
 
@@ -64,5 +77,6 @@ python -m pytest tests -q --basetemp .build/pytest
 ```
 
 `APTests.u` is for tests only.
+For x64 tests, add `-Architecture x64` to both build commands, pass the x64 installation to `build.ps1`, and set `UT99_BUILD_DIRECTORY=.build-x64` and `UT99_NATIVE_BUILD_DIRECTORY=.native-build-x64` before running pytest. The startup tests launch the game client and exit automatically; run them with other UT clients closed.
 Run `python tools/package.py` after building to make release archives.
 See `THIRD_PARTY.md` for dependencies and licenses.

@@ -1,8 +1,11 @@
-// Keep UE1 headers out of Session.cpp: UE1 uses 4-byte packing and
-// names that conflict with modern C++ libraries.
+// Keep UE1 headers out of Session.cpp: the x86 version uses 4-byte packing and
+// both versions define names that conflict with modern C++ libraries.
 #include "Engine.h"
 #include "UnRenDev.h"
 #include "Session.h"
+
+// Win32 UT uses unsigned short; Win64 UT uses wchar_t. Both carry UTF-16.
+static_assert(sizeof(TCHAR) == sizeof(unsigned short), "Session expects UTF-16");
 
 class UAPNativeClient : public UObject
 {
@@ -53,7 +56,9 @@ void UAPNativeClient::execGetVersion(FFrame& Stack, RESULT_DECL)
 }
 void UAPNativeClient::execConnect(FFrame& Stack, RESULT_DECL) {
     P_GET_STR(URL); P_GET_STR(Slot); P_GET_STR(Password); P_FINISH;
-    SessionId = SessionOpen(*URL, *Slot, *Password);
+    SessionId = SessionOpen(reinterpret_cast<const unsigned short*>(*URL),
+                           reinterpret_cast<const unsigned short*>(*Slot),
+                           reinterpret_cast<const unsigned short*>(*Password));
 }
 void UAPNativeClient::execDetach(FFrame& Stack, RESULT_DECL) {
     P_FINISH; SessionDetach(SessionId); SessionId = 0;
@@ -64,7 +69,7 @@ void UAPNativeClient::execDisconnect(FFrame& Stack, RESULT_DECL) {
 void UAPNativeClient::execPollEvent(FFrame& Stack, RESULT_DECL) {
     P_GET_STR_REF(Payload); P_FINISH;
     const unsigned short* text = SessionPoll(SessionId);
-    *Payload = text ? text : TEXT("");
+    *Payload = text ? reinterpret_cast<const TCHAR*>(text) : TEXT("");
     *(UBOOL*)Result = text != nullptr;
 }
 void UAPNativeClient::execSendLocationCheck(FFrame& Stack, RESULT_DECL) {
@@ -75,7 +80,7 @@ void UAPNativeClient::execSendDeathLink(FFrame& Stack, RESULT_DECL) { P_FINISH; 
 void UAPNativeClient::execRequestSync(FFrame& Stack, RESULT_DECL) { P_FINISH; SessionSync(SessionId); }
 void UAPNativeClient::execSendServerCommand(FFrame& Stack, RESULT_DECL) {
     P_GET_STR(Text); P_FINISH;
-    *(UBOOL*)Result = SessionSay(SessionId, *Text);
+    *(UBOOL*)Result = SessionSay(SessionId, reinterpret_cast<const unsigned short*>(*Text));
 }
 void UAPNativeClient::execRequestFragSync(FFrame& Stack, RESULT_DECL) {
     P_FINISH; *(UBOOL*)Result = SessionRequestFrags(SessionId);

@@ -12,9 +12,13 @@ if not (APCPP / "Archipelago.cpp").is_file():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--world", type=Path, default=ROOT.parent / "Archipelago_ut99/worlds/ut99")
+    parser.add_argument("--architecture", choices=("x86", "x64"), default="x86")
     args = parser.parse_args()
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
+    suffix = "-x64" if args.architecture == "x64" else ""
+    system = dist / "x64/System" if suffix else dist / "System"
+    native_build = ROOT / (".native-build" + suffix)
     with ZipFile(dist / "ut99.apworld", "w", ZIP_DEFLATED) as archive:
         for path in sorted(args.world.rglob("*")):
             if path.is_file() and not {"test", "__pycache__"}.intersection(path.parts):
@@ -29,22 +33,23 @@ if __name__ == "__main__":
         "APCpp-LGPL-2.1.txt": APCPP / "LICENSE",
         "IXWebSocket-BSD.txt": APCPP / "IXWebSocket/LICENSE.txt",
         "JsonCpp.txt": APCPP / "jsoncpp/LICENSE",
-        "mbedTLS.txt": ROOT / ".native-build/mbedtls-3.6.4/LICENSE",
+        "mbedTLS.txt": native_build / "mbedtls-3.6.4/LICENSE",
         "zlib.txt": APCPP / "zlib/LICENSE",
         "UT99-SDK.txt": ROOT / ".deps/sdk/README.md",
     }
-    with ZipFile(dist / "UT99AP-client-0.5.4.zip", "w", ZIP_DEFLATED) as archive:
+    if suffix:
+        licenses["UT99-SDK.txt"] = ROOT / ".deps/sdk-469f-rc5/SDKLICENSE.md"
+    with ZipFile(dist / f"UT99AP-client-1.0.0{suffix}.zip", "w", ZIP_DEFLATED) as archive:
         for name in ("UT99AP.u", "UT99AP.int", "UT99APNative.u", "UT99APNative.dll"):
-            archive.write(dist / "System" / name, "System/" + name)
+            archive.write(system / name, "System/" + name)
         archive.write(ROOT / "README.md", "README.md")
         archive.write(ROOT / "THIRD_PARTY.md", "THIRD_PARTY.md")
         for name, source in licenses.items():
             archive.write(source, "licenses/" + name)
         archive.write(args.world / "docs/setup_en.md", "setup_en.md")
-        archive.write(ROOT / "examples/UTPlayer.yaml", "UTPlayer.yaml")
     print(dist / "ut99.apworld")
-    with ZipFile(dist / "UT99AP-native-source-0.5.4.zip", "w", ZIP_DEFLATED) as archive:
-        for folder in ("native", "UT99AP", "UT99APNative", "APTests", "tests", "tools", "System", "examples"):
+    with ZipFile(dist / f"UT99AP-native-source-1.0.0{suffix}.zip", "w", ZIP_DEFLATED) as archive:
+        for folder in ("native", "UT99AP", "UT99APNative", "APTests", "tests", "tools", "System"):
             for path in sorted((ROOT / folder).rglob("*")):
                 if (path.is_file() and not {".git", "__pycache__", ".pytest_cache"}.intersection(path.parts)
                         and path.suffix not in {".pyc", ".lib", ".dll", ".exe"}):
@@ -55,8 +60,8 @@ if __name__ == "__main__":
                 archive.write(path, ".deps/APCpp/" + path.relative_to(APCPP).as_posix())
         for name in ("build-native.ps1", "build.ps1", "README.md", "THIRD_PARTY.md"):
             archive.write(ROOT / name, name)
-        archive.write(ROOT / ".native-build/UT99APNative.dir/Release/Bridge.obj", "relink/Bridge.obj")
+        archive.write(native_build / "UT99APNative.dir/Release/Bridge.obj", "relink/Bridge.obj")
         for name, source in licenses.items():
             archive.write(source, "licenses/" + name)
-    print(dist / "UT99AP-client-0.5.4.zip")
-    print(dist / "UT99AP-native-source-0.5.4.zip")
+    print(dist / f"UT99AP-client-1.0.0{suffix}.zip")
+    print(dist / f"UT99AP-native-source-1.0.0{suffix}.zip")

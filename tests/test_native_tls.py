@@ -1,6 +1,7 @@
 """Test shipping Session objects with a test-only trust root."""
 import asyncio
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import ssl
@@ -14,7 +15,7 @@ import pytest
 import websockets
 
 ROOT = Path(__file__).resolve().parents[1]
-PROBE = ROOT / ".native-build/Release/NativeSessionProbe.exe"
+PROBE = ROOT / os.environ.get("UT99_NATIVE_BUILD_DIRECTORY", ".native-build") / "Release/NativeSessionProbe.exe"
 
 
 def certificate(directory):
