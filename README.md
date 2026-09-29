@@ -77,6 +77,8 @@ python -m pytest tests -q --basetemp .build/pytest
 ```
 
 `APTests.u` is for tests only.
-For x64 tests, add `-Architecture x64` to both build commands, pass the x64 installation to `build.ps1`, and set `UT99_BUILD_DIRECTORY=.build-x64` and `UT99_NATIVE_BUILD_DIRECTORY=.native-build-x64` before running pytest. The startup tests launch the game client and exit automatically; run them with other UT clients closed.
+For x64 tests, add `-Architecture x64` to both build commands, pass the x64 installation to `build.ps1`, and set `UT99_BUILD_DIRECTORY=.build-x64` and `UT99_NATIVE_BUILD_DIRECTORY=.native-build-x64` before running pytest. 
+The startup tests launch the game client and exit automatically.
+Run them with other UT clients closed.
 Run `python tools/package.py` after building to make release archives.
 See `THIRD_PARTY.md` for dependencies and licenses.

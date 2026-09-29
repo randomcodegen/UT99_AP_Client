@@ -11,6 +11,10 @@ var bool bFailed;
 var bool bPickupsScouted;
 var string Transport;
 var string Players;
+var string PendingItems;
+var int PendingItemPos, PendingItemIndex;
+var bool bUnlockChanged, bProgressDirty;
+var float SaveAge;
 
 function ConnectTo(string URL)
 {
@@ -20,6 +24,7 @@ function ConnectTo(string URL)
 
 event Destroyed()
 {
+    if (bProgressDirty && AP != None && AP.Progress != None) AP.Progress.SaveConfig();
     if (Bridge != None) Bridge.Detach();
     Super.Destroyed();
 }
@@ -44,13 +49,29 @@ event Tick(float Delta)
     local int I;
     local string Packet;
     if (bFailed || Bridge == None || AP == None) return;
-    for (I = 0; I < 128 && Bridge.PollEvent(Packet); I++)
+    if (PendingItems != "") DrainItems();
+    else
     {
-        OnMessage(Packet);
-        if (bFailed) return;
+        for (I = 0; I < 16 && Bridge.PollEvent(Packet); I++)
+        {
+            OnMessage(Packet);
+            if (bFailed) return;
+            if (PendingItems != "") break;
+        }
+    }
+    if (bProgressDirty)
+    {
+        SaveAge += Delta;
+        if (SaveAge >= 1)
+        {
+            AP.Progress.SaveConfig();
+            bProgressDirty = false;
+            SaveAge = 0;
+        }
     }
     AuthAge += Delta;
-    if (AuthAge > 30 && (!bHaveItems || !bFragsSynced) && !bFailed) Fail("AP synchronization timed out");
+    if (AuthAge > 30 && PendingItems == "" && (!bHaveItems || !bFragsSynced) && !bFailed)
+        Fail("AP synchronization timed out");
 }
 
 function OnMessage(string S)
@@ -85,6 +106,7 @@ function OnMessage(string S)
         }
         else if (Command == "NativeDisconnected")
         {
+            PendingItems = "";
             if (AP.bReady) AuthAge = 0;
             AP.bReady = false;
             bAuthenticated = false;
@@ -204,6 +226,7 @@ function ConnectedPacket(string Packet)
     AP.Progress.SelectSlot(Identity);
     CheckedPacket(class'APJson'.static.Get(Packet, "checked_locations"));
     AP.bReady = false;
+    PendingItems = "";
     bHaveItems = false;
     bFragsSynced = false;
     bGoalSent = false;
@@ -215,11 +238,13 @@ function ConnectedPacket(string Packet)
 
 function ItemsPacket(string Packet)
 {
-    local string Items, Entry;
-    local int P, Index, I, ItemID, Flags;
+    local string Items;
+    local int Index, I;
     Index = int(class'APJson'.static.Get(Packet, "index"));
     if (Index == 0)
     {
+        AP.bReady = false;
+        bHaveItems = false;
         ItemIndex = 0;
         for (I = 0; I < 82; I++) AP.SetUnlocked(I, false);
         for (I = 0; I < 9; I++) AP.Weapons[I].bSet = false;
@@ -236,20 +261,32 @@ function ItemsPacket(string Packet)
     }
     Items = class'APJson'.static.Get(Packet, "items");
     if (Left(Items, 1) != "[") { Fail("Invalid inventory packet"); return; }
-    while (class'APJson'.static.Next(Items, P, Entry))
+    PendingItems = Items;
+    PendingItemPos = 0;
+    PendingItemIndex = Index;
+    bUnlockChanged = false;
+}
+
+function DrainItems()
+{
+    local string Entry;
+    local int I, ItemID, Flags;
+    for (I = 0; I < 16 && class'APJson'.static.Next(PendingItems, PendingItemPos, Entry); I++)
     {
-        if (Index >= ItemIndex)
+        if (PendingItemIndex >= ItemIndex)
         {
             ItemID = int(class'APJson'.static.Get(Entry, "item")) - 19990000;
-            if (ItemID >= 0 && ItemID < 82) AP.SetUnlocked(ItemID, true);
-            else if (ItemID >= 100 && ItemID < 109) AP.Weapons[ItemID - 100].bSet = true;
+            if (ItemID >= 0 && ItemID < 82)
+            { AP.SetUnlocked(ItemID, true); bUnlockChanged = true; }
+            else if (ItemID >= 100 && ItemID < 109)
+            { AP.Weapons[ItemID - 100].bSet = true; bUnlockChanged = true; }
             else if (AP.PickupUnlockMode == 1 && ItemID >= 300 && ItemID < 308)
-                AP.PickupFamilies[ItemID - 300].bSet = true;
+            { AP.PickupFamilies[ItemID - 300].bSet = true; bUnlockChanged = true; }
             else if (AP.PickupUnlockMode == 2 && ItemID >= 400 && ItemID < 432)
-                AP.PickupTypes[ItemID - 400].bSet = true;
+            { AP.PickupTypes[ItemID - 400].bSet = true; bUnlockChanged = true; }
             else if (ItemID != 201 && ItemID != 202 && (ItemID < 204 || ItemID > 212))
             { Fail("Unknown UT99 item ID; update the client"); return; }
-            if (Index >= AP.Progress.NotifiedItemIndex)
+            if (PendingItemIndex >= AP.Progress.NotifiedItemIndex)
             {
                 if (ItemID == 201) AP.Progress.PendingHealth++;
                 else if (ItemID == 202) AP.Progress.PendingArmor++;
@@ -265,12 +302,16 @@ function ItemsPacket(string Packet)
                     AP.ItemNotice(ItemName(ItemID), PlayerName(int(class'APJson'.static.Get(Entry, "player"))),
                         Flags, int(class'APJson'.static.Get(Entry, "player")) == LocalSlot,
                         class'APJson'.static.Decode(class'APJson'.static.Get(Entry, "location_name")));
-                AP.Progress.NotifiedItemIndex = Index + 1;
+                AP.Progress.NotifiedItemIndex = PendingItemIndex + 1;
+                bProgressDirty = true;
             }
             ItemIndex++;
         }
-        Index++;
+        PendingItemIndex++;
     }
+    class'APJson'.static.SkipSpace(PendingItems, PendingItemPos);
+    if (Mid(PendingItems, PendingItemPos, 1) != "]") return;
+    PendingItems = "";
     bHaveItems = true;
     TryReady();
 }
@@ -313,9 +354,17 @@ function TryReady()
 {
     local int I;
     if (!bHaveItems || !bFragsSynced) return;
+    if (AP.bReady)
+    {
+        if (bUnlockChanged) AP.InventoryReady();
+        else AP.ApplyFiller();
+        return;
+    }
     for (I = 0; I < 82; I++)
         if (AP.Progress.GetPendingFrag(I) > 0) Bridge.SetFrag(I, AP.Progress.GetPendingFrag(I));
     AP.Progress.SaveConfig();
+    bProgressDirty = false;
+    SaveAge = 0;
     AP.bReady = true;
     AP.Status = "Connected (" $ Transport $ ") to " $ SeedName;
     AP.InventoryReady();

@@ -8,6 +8,8 @@ var bool bReattached;
 var float Elapsed;
 var APPickupMarker TimerMarker;
 var float TimerStarted;
+var int ObservedItemIndex;
+var bool bSawLiveItemBurst;
 
 function FailTest(string Reason)
 {
@@ -52,6 +54,14 @@ function Tick(float Delta)
         FailTest("timeout, phase " $ Phase); return;
     }
     if (AP == None) { AP = APTestGame(Level.Game).AP; return; }
+    if (AP.Client != None)
+    {
+        if (AP.Client.ItemIndex - ObservedItemIndex > 16)
+        { FailTest("item burst processed in one frame"); return; }
+        ObservedItemIndex = AP.Client.ItemIndex;
+        if (Phase == 1 && AP.bReady && AP.Client.PendingItems != "")
+            bSawLiveItemBurst = true;
+    }
     if (!AP.bReady) return;
     if (Phase == 0 && AP.WeaponLogicPercentage > 0 && !bReattached)
     {
@@ -62,7 +72,7 @@ function Tick(float Delta)
     LastCheck = AP.CheckIndex(0, AP.MatchFragLimit / AP.FragIncrement);
     ArenaChecks = 1 + AP.MatchFragLimit / AP.FragIncrement;
     SlotChecks = 2 * ArenaChecks;
-    ExpectedItems = 5;
+    ExpectedItems = 5 + APTestGame(Level.Game).TestItemBurst;
     if (AP.PickupUnlockMode == 1) ExpectedItems += 2;
     else if (AP.PickupUnlockMode == 2) ExpectedItems += 3;
     if (AP.bPickupLocations)
@@ -399,6 +409,8 @@ function Tick(float Delta)
     }
     else if (Phase == 1 && AP.IsUnlocked(1))
     {
+        if (APTestGame(Level.Game).TestItemBurst > 0 && !bSawLiveItemBurst)
+        { FailTest("live item burst was not processed"); return; }
         AP.GetCheckCounts(Collected, InLogic, Total);
         if (Collected != ArenaChecks || InLogic != SlotChecks || Total != SlotChecks ||
             AP.CollectedOnMap(0) != ArenaChecks || AP.CollectedOnMap(1) != 0)

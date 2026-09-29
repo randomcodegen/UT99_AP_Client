@@ -29,16 +29,17 @@ def test_compiled_json():
     assert b"AP SELFTEST PASS" in result.stdout, result.stdout.decode(errors="replace")
 
 
-@pytest.mark.parametrize("scheme,increment,limit,minnotify", [
-    ("", 2, 8, 0), ("ws://", 2, 8, 0), ("wss://", 2, 8, 0),
-    ("ws://", 1, 20, 0), ("ws://", 3, 20, 0), ("ws://", 1, 100, 0),
-    ("ws://", 1, 20, 1), ("ws://", 1, 20, 2),
+@pytest.mark.parametrize("scheme,increment,limit,minnotify,burst", [
+    ("", 2, 8, 0, 0), ("ws://", 2, 8, 0, 0), ("wss://", 2, 8, 0, 0),
+    ("ws://", 1, 20, 0, 0), ("ws://", 3, 20, 0, 0), ("ws://", 1, 100, 0, 0),
+    ("ws://", 1, 20, 1, 0), ("ws://", 1, 20, 2, 0),
+    ("ws://", 1, 20, 2, 256),
 ])
-def test_runtime_connection_gameplay_and_reconnect(scheme, increment, limit, minnotify):
-    asyncio.run(exercise_client(scheme, increment, limit, minnotify))
+def test_runtime_connection_gameplay_and_reconnect(scheme, increment, limit, minnotify, burst):
+    asyncio.run(exercise_client(scheme, increment, limit, minnotify, burst))
 
 
-async def exercise_client(scheme, increment, limit, minnotify):
+async def exercise_client(scheme, increment, limit, minnotify, burst):
     connections = 0
     first_connection_connects = 0
     commands = []
@@ -52,6 +53,7 @@ async def exercise_client(scheme, increment, limit, minnotify):
     frag_sets = []
     death_link_updates = []
     death_links_sent = []
+    released = False
     slot = {"schema_version": 11, "selected_maps": [0, 1], "starting_map": 0,
             "goal_required": 1, "frag_check_increment": increment, "match_frag_limit": limit,
             "bot_skill": 2, "bot_count": 1, "pickup_catalog_version": 2,
@@ -61,7 +63,7 @@ async def exercise_client(scheme, increment, limit, minnotify):
     scouted = set()
 
     async def handler(ws):
-        nonlocal connections, first_connection_connects
+        nonlocal connections, first_connection_connects, released
         try:
             connections += 1
             assert any(type(ext).__name__ == "PerMessageDeflate"
@@ -76,6 +78,8 @@ async def exercise_client(scheme, increment, limit, minnotify):
                      {"item": 19990105, "player": 0, "flags": 1, "location": -2},
                      {"item": 19990209, "player": 2, "flags": 0}]
             items.extend({"item": item, "player": 2} for item in extra_unlocks)
+            if released:
+                items.extend({"item": 19990201, "player": 2} for _ in range(burst))
             if connections > 1:
                 items.append({"item": 19990001, "player": 2})
             packet = json.dumps([
@@ -160,6 +164,12 @@ async def exercise_client(scheme, increment, limit, minnotify):
                         assert command["status"] == 30
                         goal_received.set()
                 if connections == 1 and goal_received.is_set():
+                    released = True
+                    if burst:
+                        await ws.send(json.dumps([{"cmd": "ReceivedItems", "index": len(items),
+                                                  "items": [{"item": 19990201, "player": 2}
+                                                            for _ in range(burst)]}]))
+                        await asyncio.sleep(3)
                     await ws.close()
                     return
         except websockets.ConnectionClosed:
@@ -183,7 +193,7 @@ async def exercise_client(scheme, increment, limit, minnotify):
         with log.open("wb") as output:
             process = subprocess.Popen([
                 str(SYSTEM / "UCC.exe"), "Engine.ServerCommandlet",
-                "DM-Oblivion?Game=APTests.APTestGame?APStage=1?Difficulty=2?Port=0",
+                f"DM-Oblivion?Game=APTests.APTestGame?APStage=1?APBurst={burst}?Difficulty=2?Port=0",
                 "ini=Test.ini", "-nohomedir", "-lanplay"], cwd=SYSTEM, stdout=output,
                 stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
             try:
