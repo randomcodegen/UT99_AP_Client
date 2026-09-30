@@ -22,15 +22,22 @@ function Tick(float Delta)
     {
         if (!bFirstCheckSent) { bFirstCheckSent = true; AP.Check(1); return; }
         if (!AP.IsUnlocked(1) || AP.Progress.IsPendingCheck(1)) return;
+        Log("AP TRAVEL RESTART AT ITEM " $ AP.Client.ItemIndex);
         VisitCount = 1;
         SaveConfig();
         Level.ServerTravel("?Restart", false);
     }
     else if (VisitCount == 1)
     {
-        if (!AP.Progress.IsChecked(1) || !AP.IsUnlocked(1) || AP.Client.ItemIndex != 4 ||
+        if (AP.Client.PendingItems != "") return;
+        if (!AP.Progress.IsChecked(1) || !AP.IsUnlocked(1) ||
+            AP.Client.ItemIndex != 4 + APTravelGame(Level.Game).TestItemBurst ||
             AP.Progress.PendingWeaponAmmo[5] != 1)
         { FailTest("server state not restored after travel"); return; }
+        if (APTravelGame(Level.Game).TestItemBurst > 0 &&
+            (AP.Progress.PendingHealth != APTravelGame(Level.Game).TestItemBurst ||
+             AP.Progress.GetFrag(1) != 20))
+        { FailTest("item burst or frag history lost after travel"); return; }
         if (!bSecondCheckSent) { bSecondCheckSent = true; AP.Check(2); return; }
         if (AP.Progress.IsPendingCheck(2)) return;
         VisitCount = 2;

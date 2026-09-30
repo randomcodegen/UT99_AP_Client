@@ -6,21 +6,25 @@ import subprocess
 import uuid
 
 import websockets
+import pytest
 
 
 SYSTEM = Path(__file__).resolve().parents[1] / os.environ.get("UT99_BUILD_DIRECTORY", ".build") / "System"
 
 
-def test_map_travel_keeps_connection():
-    asyncio.run(_exercise())
+@pytest.mark.parametrize("large", [False, True])
+def test_map_travel_keeps_connection(large):
+    asyncio.run(_exercise(large))
 
 
-async def _exercise():
+async def _exercise(large):
     connections = 0
     connects = 0
     checks = set()
     storage = {}
     errors = []
+    frag_sets = []
+    burst = 500 if large else 0
     seed = "UT99-travel-" + uuid.uuid4().hex
     slot = {"schema_version": 11, "selected_maps": [0, 1], "starting_map": 0,
             "goal_required": 1, "pickup_catalog_version": 2, "pickup_locations": [],
@@ -28,6 +32,11 @@ async def _exercise():
             "frag_check_increment": 1, "match_frag_limit": 20, "bot_skill": 2, "bot_count": 1}
     items = [{"item": 19990000, "player": 1}, {"item": 19990105, "player": 1},
              {"item": 19990209, "player": 1}]
+    if large:
+        slot["selected_maps"] = list(range(82))
+        slot["pickup_locations"] = list(range(19996000, 19996000 + 4792))
+        checks.update(slot["pickup_locations"][:4000])
+    initial_checks = set(checks)
 
     async def handler(ws):
         nonlocal connections, connects
@@ -58,17 +67,26 @@ async def _exercise():
                             if operation["operation"] == "max": value = max(value, operation["value"])
                             elif operation["operation"] == "replace": value = operation["value"]
                         storage[key] = value
+                        if "UT99Frags" in key:
+                            frag_sets.append((key, value))
                         if packet.get("want_reply"):
                             await ws.send(json.dumps([{"cmd": "SetReply", "key": key,
                                                        "original_value": original, "value": value}]))
                     elif cmd == "LocationChecks":
                         new = set(packet["locations"]) - checks
                         checks.update(new)
-                        await ws.send(json.dumps([{"cmd": "RoomUpdate", "checked_locations": sorted(checks)}]))
                         if 19991001 in new:
+                            if large:
+                                checks.update(range(19991102, 19991122))
                             items.append({"item": 19990001, "player": 1})
+                            items.extend({"item": 19990201, "player": 1, "flags": 0,
+                                          "location": 19996000 + i} for i in range(burst))
+                            # Restart while part of the released inventory is still queued.
+                            await ws.send(json.dumps([{"cmd": "RoomUpdate", "checked_locations": sorted(checks)}]))
                             await ws.send(json.dumps([{"cmd": "ReceivedItems", "index": 3,
                                                        "items": items[3:]}]))
+                            continue
+                        await ws.send(json.dumps([{"cmd": "RoomUpdate", "checked_locations": sorted(checks)}]))
         except websockets.ConnectionClosed:
             pass
         except Exception as exc:
@@ -85,12 +103,13 @@ async def _exercise():
             "[APTests.APTravelDriver]\nVisitCount=0\n")
         config = (SYSTEM / "Build.ini").read_text()
         config = config.replace("[Engine.Engine]", "[Engine.Engine]\nNetworkDevice=IpDrv.TcpNetDriver")
-        (SYSTEM / "Travel.ini").write_text(config + "\n[Engine.GameEngine]\nCacheSizeMegs=64\n")
+        (SYSTEM / "Travel.ini").write_text(config +
+            "\n[Engine.GameEngine]\nCacheSizeMegs=64\n[IpDrv.TcpNetDriver]\nNetServerMaxTickRate=60\n")
         log = SYSTEM / "travel-output.log"
         with log.open("wb") as output:
             process = subprocess.Popen([
                 str(SYSTEM / "UCC.exe"), "Engine.ServerCommandlet",
-                "DM-Oblivion?Game=APTests.APTravelGame?APStage=1?Port=0",
+                f"DM-Oblivion?Game=APTests.APTravelGame?APStage=1?APBurst={burst}?Port=0",
                 "ini=Travel.ini", "-nohomedir", "-lanplay"], cwd=SYSTEM,
                 stdout=output, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
             try:
@@ -104,4 +123,11 @@ async def _exercise():
         assert "AP TRAVEL PASS" in text, text[-6000:]
         assert "AP TRAVEL FAIL" not in text and "Accessed None" not in text, text[-6000:]
         assert connections == 1 and connects == 2, (connections, connects, text[-3000:])
-        assert checks == {19991001, 19991002}, checks
+        expected = initial_checks | {19991001, 19991002}
+        if large:
+            expected.update(range(19991102, 19991122))
+            restart_index = int(text.split("AP TRAVEL RESTART AT ITEM ")[1].splitlines()[0])
+            assert 4 <= restart_index < 4 + burst, restart_index
+            assert [value for key, value in frag_sets if key.endswith("UT99Frags1")] == [20], frag_sets
+            assert text.count("Received Health Refill") == burst, text[-6000:]
+        assert checks == expected, checks

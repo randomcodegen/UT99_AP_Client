@@ -380,8 +380,9 @@ function SendFrag(int MapIndex, int Value)
 
 function CheckedPacket(string Checks)
 {
-    local int P, I, MapIndex, Milestone;
+    local int P, I, MapIndex, Milestone, Frags;
     local string V;
+    local byte Changed[82];
     while (class'APJson'.static.Next(Checks, P, V))
     {
         I = int(V) - 19991000;
@@ -390,11 +391,17 @@ function CheckedPacket(string Checks)
             AP.Progress.ConfirmChecked(I);
             if (Milestone > 0 && (MapIndex < 37 || I >= 10000))
             {
-                AP.Progress.MergeFrag(MapIndex, Milestone * AP.FragIncrement);
-                SendFrag(MapIndex, AP.Progress.GetFrag(MapIndex));
+                Frags = Milestone * AP.FragIncrement;
+                if (Frags > AP.Progress.GetFrag(MapIndex))
+                {
+                    AP.Progress.SetLocalFrag(MapIndex, Frags);
+                    Changed[MapIndex] = 1;
+                }
             }
         }
     }
+    for (I = 0; I < 82; I++)
+        if (Changed[I] != 0) SendFrag(I, AP.Progress.GetFrag(I));
 }
 
 function SendChecks()

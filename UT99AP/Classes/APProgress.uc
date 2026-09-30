@@ -1,4 +1,4 @@
-class APProgress extends Info config(UT99APProgress);
+class APProgress extends Object config(UT99APProgress);
 
 var config string Identity;
 struct APFlag { var bool bSet; };
@@ -9,6 +9,14 @@ var config int PendingHealth, PendingArmor;
 var config int PendingWeaponAmmo[9];
 var APFlag ActiveChecked[15000];
 var int ActiveFrags[82];
+
+static function APProgress GetSession()
+{
+    // the native package keeps this object alive across map travel
+    if (class'APNativeClient'.default.ProgressCache == None)
+        class'APNativeClient'.default.ProgressCache = new(None) class'APProgress';
+    return APProgress(class'APNativeClient'.default.ProgressCache);
+}
 
 function bool IsChecked(int Index) { return ActiveChecked[Index].bSet; }
 function bool IsPendingCheck(int Index) { return Checked[Index].bSet; }
@@ -56,6 +64,6 @@ function SelectSlot(string NewIdentity)
             Frags[I] = 0;
             ActiveFrags[I] = 0;
         }
+        SaveConfig();
     }
-    SaveConfig();
 }

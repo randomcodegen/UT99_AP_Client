@@ -11,8 +11,12 @@ class UAPNativeClient : public UObject
 {
 public:
     INT SessionId;
+    UObject* ProgressCache;
     DECLARE_CLASS(UAPNativeClient, UObject, 0, UT99APNative)
     NO_DEFAULT_CONSTRUCTOR(UAPNativeClient)
+    DECLARE_FUNCTION(execReadJsonValue)
+    DECLARE_FUNCTION(execReadJsonField)
+    DECLARE_FUNCTION(execReadJsonString)
     DECLARE_FUNCTION(execGetVersion)
     DECLARE_FUNCTION(execConnect)
     DECLARE_FUNCTION(execDetach)
@@ -33,6 +37,9 @@ public:
 
 IMPLEMENT_PACKAGE(UT99APNative)
 IMPLEMENT_CLASS(UAPNativeClient)
+IMPLEMENT_FUNCTION(UAPNativeClient, -1, execReadJsonValue)
+IMPLEMENT_FUNCTION(UAPNativeClient, -1, execReadJsonField)
+IMPLEMENT_FUNCTION(UAPNativeClient, -1, execReadJsonString)
 IMPLEMENT_FUNCTION(UAPNativeClient, -1, execGetVersion)
 IMPLEMENT_FUNCTION(UAPNativeClient, -1, execConnect)
 IMPLEMENT_FUNCTION(UAPNativeClient, -1, execDetach)
@@ -48,6 +55,22 @@ IMPLEMENT_FUNCTION(UAPNativeClient, -1, execSetFrag)
 IMPLEMENT_FUNCTION(UAPNativeClient, -1, execScoutLocation)
 IMPLEMENT_FUNCTION(UAPNativeClient, -1, execDrawPickupMarker)
 IMPLEMENT_FUNCTION(UAPNativeClient, -1, execProjectPoint)
+
+void UAPNativeClient::execReadJsonValue(FFrame& Stack, RESULT_DECL) {
+    P_GET_STR(Text); P_GET_INT_REF(Cursor); P_GET_STR_REF(Value); P_GET_UBOOL_OPTX(ArrayElement, 0); P_FINISH;
+    const auto* value = JsonReadValue(reinterpret_cast<const unsigned short*>(*Text), *Cursor, ArrayElement != 0);
+    *Value = value ? reinterpret_cast<const TCHAR*>(value) : TEXT("");
+    *(UBOOL*)Result = value != nullptr;
+}
+void UAPNativeClient::execReadJsonField(FFrame& Stack, RESULT_DECL) {
+    P_GET_STR(Text); P_GET_STR(Key); P_FINISH;
+    *(FString*)Result = reinterpret_cast<const TCHAR*>(JsonReadField(
+        reinterpret_cast<const unsigned short*>(*Text), reinterpret_cast<const unsigned short*>(*Key)));
+}
+void UAPNativeClient::execReadJsonString(FFrame& Stack, RESULT_DECL) {
+    P_GET_STR(Text); P_FINISH;
+    *(FString*)Result = reinterpret_cast<const TCHAR*>(JsonReadString(reinterpret_cast<const unsigned short*>(*Text)));
+}
 
 void UAPNativeClient::execGetVersion(FFrame& Stack, RESULT_DECL)
 {

@@ -12,3 +12,6 @@ void SessionSync(int id);
 bool SessionSay(int id, const unsigned short* text);
 bool SessionRequestFrags(int id);
 void SessionSetFrag(int id, int map, int value);
+const unsigned short* JsonReadValue(const unsigned short* text, int& cursor, bool arrayElement);
+const unsigned short* JsonReadField(const unsigned short* text, const unsigned short* key);
+const unsigned short* JsonReadString(const unsigned short* text);

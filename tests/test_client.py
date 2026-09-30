@@ -29,6 +29,13 @@ def test_compiled_json():
     assert b"AP SELFTEST PASS" in result.stdout, result.stdout.decode(errors="replace")
 
 
+def test_large_json_packets():
+    result = subprocess.run([str(SYSTEM / "UCC.exe"), "APTests.APJsonPerfCommandlet",
+                             "ini=Build.ini", "-nohomedir"], cwd=SYSTEM,
+                            capture_output=True, timeout=5)
+    assert result.returncode == 0 and b"AP PERF PASS" in result.stdout, result.stdout
+
+
 @pytest.mark.parametrize("scheme,increment,limit,minnotify,burst", [
     ("", 2, 8, 0, 0), ("ws://", 2, 8, 0, 0), ("wss://", 2, 8, 0, 0),
     ("ws://", 1, 20, 0, 0), ("ws://", 3, 20, 0, 0), ("ws://", 1, 100, 0, 0),

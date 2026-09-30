@@ -37,7 +37,6 @@ function Timer()
     local PlayerPawn P;
     local APPickupMarker Marker;
     local vector Eye, Target;
-    local Info Camera;
     local APConsoleEditBox Edit;
     local APMenuWindow MenuWindow;
     local APMenuClient MenuClient;
@@ -133,8 +132,7 @@ function Timer()
         P.SetLocation(Eye - vect(0,0,1) * P.EyeHeight);
         P.ClientSetRotation(rotator(Target - Eye));
         P.ViewRotation = rotator(Target - Eye);
-        Camera = Spawn(class'APProgress',,,Eye,rotator(Target - Eye));
-        P.ViewTarget = Camera;
+        P.ViewTarget = None;
         Log("AP VISUAL READY");
     }
     if (Frame == 3)

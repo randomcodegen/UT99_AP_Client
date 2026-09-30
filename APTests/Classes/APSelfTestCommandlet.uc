@@ -38,6 +38,19 @@ function int Main(string Args)
     P = 0;
     if (class'APJson'.static.Value("{\"a\":[1,]}", P, V))
     { Log("FAIL: accepted invalid JSON"); return 1; }
+    P = 0;
+    S = "[\"" $ Chr(252) $ "\",{\"x\":\"\\u65e5\\ud83d\\ude00\"},null,true,-1.5e2]";
+    if (!class'APJson'.static.Next(S, P, V) || P != 4 ||
+        class'APJson'.static.Decode(V) != Chr(252)) return 1;
+    if (!class'APJson'.static.Next(S, P, V) ||
+        class'APJson'.static.Decode(class'APJson'.static.Get(V, "x")) !=
+        (Chr(26085) $ Chr(55357) $ Chr(56832))) return 1;
+    if (!class'APJson'.static.Next(S, P, V) || V != "null") return 1;
+    if (!class'APJson'.static.Next(S, P, V) || V != "true") return 1;
+    if (!class'APJson'.static.Next(S, P, V) || V != "-1.5e2") return 1;
+    if (class'APJson'.static.Next(S, P, V)) return 1;
+    if (class'APJson'.static.Get("{\"a\":null}", "a") != "null" ||
+        class'APJson'.static.Get("{\"a\":1}", "missing") != "") return 1;
     Log("AP SELFTEST PASS");
     return 0;
 }

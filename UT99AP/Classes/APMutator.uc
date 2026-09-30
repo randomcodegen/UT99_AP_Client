@@ -51,9 +51,7 @@ function PostBeginPlay()
 {
     local int I, MapIndex, Family;
     Super.PostBeginPlay();
-    Progress = Spawn(class'APProgress');
-    // Create persistent UUID
-    Progress.SelectSlot(Progress.Identity);
+    Progress = class'APProgress'.static.GetSession();
     CurrentMap = -1;
     if (APDeathMatch(Level.Game) != None || APCTF(Level.Game) != None ||
         APDomination(Level.Game) != None || APAssault(Level.Game) != None)

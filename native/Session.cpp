@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <cstdlib>
+#include <cwchar>
 #include <deque>
 #include <mutex>
 #include <memory>
@@ -38,6 +39,31 @@ std::string Utf8(const unsigned short* text) {
     WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide, -1, &result[0], size, nullptr, nullptr);
     result.pop_back();
     return result;
+}
+
+std::wstring Utf16(const std::string& text) {
+    if (text.empty()) return {};
+    int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), int(text.size()), nullptr, 0);
+    if (!size) throw std::runtime_error("Invalid UTF-8 in JSON");
+    std::wstring result(size, L'\0');
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), int(text.size()), &result[0], size);
+    return result;
+}
+
+bool ReadJson(const std::string& text, Json::Value& value) {
+    Json::CharReaderBuilder builder;
+    builder["allowComments"] = false;
+    builder["allowTrailingCommas"] = false;
+    builder["stackLimit"] = 32;
+    std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+    std::string errors;
+    return reader->parse(text.data(), text.data() + text.size(), &value, &errors);
+}
+
+const unsigned short* JsonText(const std::string& text) {
+    static std::wstring result; // JSON helpers run on the game thread.
+    result = Utf16(text);
+    return reinterpret_cast<const unsigned short*>(result.c_str());
 }
 
 void Queue(std::string packet) {
@@ -144,6 +170,50 @@ void ShutdownSession() {
     overflow = false;
     roomInfoPacket.clear(); transportPacket.clear();
 }
+}
+
+const unsigned short* JsonReadValue(const unsigned short* text, int& cursor, bool arrayElement) {
+    try {
+        if (cursor < 0 || size_t(cursor) > std::wcslen(reinterpret_cast<const wchar_t*>(text))) return nullptr;
+        if (arrayElement) {
+            if (cursor == 0) {
+                if (text[0] != '[') return nullptr;
+                cursor = 1;
+            }
+            while (text[cursor] && text[cursor] <= 32) ++cursor;
+            if (text[cursor] == ',') ++cursor;
+            while (text[cursor] && text[cursor] <= 32) ++cursor;
+            if (!text[cursor] || text[cursor] == ']') return nullptr;
+        }
+        const auto input = Utf8(text + cursor);
+        Json::Value value;
+        if (!ReadJson(input, value)) return nullptr;
+        const auto start = size_t(value.getOffsetStart()), end = size_t(value.getOffsetLimit());
+        cursor += int(Utf16(input.substr(0, end)).size());
+        return JsonText(input.substr(start, end - start));
+    } catch (const std::exception&) { return nullptr; }
+}
+
+const unsigned short* JsonReadField(const unsigned short* text, const unsigned short* key) {
+    try {
+        const auto input = Utf8(text);
+        Json::Value value;
+        const auto name = Utf8(key);
+        if (!ReadJson(input, value) || !value.isObject() || !value.isMember(name)) return JsonText("");
+        const auto& field = value[name];
+        const auto start = size_t(field.getOffsetStart()), end = size_t(field.getOffsetLimit());
+        return JsonText(input.substr(start, end - start));
+    } catch (const std::exception&) { return JsonText(""); }
+}
+
+const unsigned short* JsonReadString(const unsigned short* text) {
+    try {
+        const auto input = Utf8(text);
+        Json::Value value;
+        if (input.empty() || input[0] != '"') return JsonText(input);
+        if (!ReadJson(input, value) || !value.isString()) return JsonText("");
+        return JsonText(value.asString());
+    } catch (const std::exception&) { return JsonText(""); }
 }
 
 int SessionOpen(const unsigned short* url, const unsigned short* slot, const unsigned short* password) {
